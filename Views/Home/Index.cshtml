@@ -1,8 +1,142 @@
 ﻿@{
-    ViewData["Title"] = "Home Page";
+    ViewData["Title"] = "ZoZoom Room";
 }
 
 <div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+    <h1 class="display-4">ZoZoom</h1>
+
+    <div style="display:flex;justify-content:center;gap:20px;margin-top:20px;">
+        <div>
+            <h3>Я</h3>
+            <video id="localVideo" autoplay muted playsinline
+                   style="width:400px;background:#222;border-radius:8px;"></video>
+        </div>
+        <div>
+            <h3>Остальные</h3>
+            <div id="remoteVideos" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
+        </div>
+    </div>
+
+    <button id="startCallBtn" class="btn btn-primary mt-4" style="display:none;">
+        Начать трансляцию
+    </button>
+    <p id="statusMsg" style="margin-top:10px;color:gray;"></p>
 </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+<script>
+    const setStatus = (msg) => document.getElementById('statusMsg').textContent = msg;
+
+    const connection = new signalR.HubConnectionBuilder()
+        .withUrl("/webrtcHub")
+        .build();
+
+    const configuration = {
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    };
+    const peerConnection = new RTCPeerConnection(configuration);
+    let localStream;
+
+    // Входящие треки от сервера
+    peerConnection.ontrack = (event) => {
+        const container = document.getElementById('remoteVideos');
+        const streamId = event.streams[0].id;
+
+        if (!document.getElementById(streamId)) {
+            const video = document.createElement('video');
+            video.id = streamId;
+            video.autoplay = true;
+            video.playsinline = true;
+            video.srcObject = event.streams[0];
+            video.style.cssText = 'width:300px;background:#333;border-radius:8px;';
+            container.appendChild(video);
+        }
+    };
+
+    // Инициализация камеры
+    async function initCamera() {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            document.getElementById('startCallBtn').style.display = 'inline-block';
+            setStatus('Камера готова');
+        } catch (e) {
+            setStatus('Ошибка доступа к камере: ' + e.message);
+        }
+    }
+
+    // Ждём ICE gathering
+    async function waitIceGathering(pc) {
+        return new Promise((resolve) => {
+            if (pc.iceGatheringState === 'complete') {
+                resolve();
+            } else {
+                pc.onicegatheringstatechange = () => {
+                    if (pc.iceGatheringState === 'complete') resolve();
+                };
+                setTimeout(resolve, 4000);
+            }
+        });
+    }
+
+    // Старт трансляции
+    document.getElementById('startCallBtn').addEventListener('click', async () => {
+        document.getElementById('startCallBtn').style.display = 'none';
+        setStatus('Подключение...');
+
+        try {
+            if (connection.state === signalR.HubConnectionState.Disconnected) {
+                await connection.start();
+                setStatus('SignalR подключён');
+            }
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            await waitIceGathering(peerConnection);
+
+            setStatus('Отправляем оффер...');
+            await connection.invoke("SendOffer", peerConnection.localDescription.sdp);
+            setStatus('Оффер отправлен, ждём ответ...');
+
+        } catch (err) {
+            console.error(err);
+            setStatus('Ошибка: ' + err.message);
+            document.getElementById('startCallBtn').style.display = 'inline-block';
+        }
+    });
+
+    // Приём первичного answer (при подключении)
+    connection.on("ReceiveAnswer", async (answerSdp) => {
+        try {
+            await peerConnection.setRemoteDescription(
+                new RTCSessionDescription({ type: 'answer', sdp: answerSdp })
+            );
+            setStatus('P2P канал установлен');
+        } catch (e) {
+            setStatus('Ошибка установки remote SDP: ' + e.message);
+        }
+    });
+
+    // Renegotiation — сервер шлёт новый offer когда кто-то вошёл/вышел
+    connection.on("ReceiveOffer", async (sdp) => {
+        setStatus('Новый участник, обновляем соединение...');
+        try {
+            await peerConnection.setRemoteDescription(
+                new RTCSessionDescription({ type: 'offer', sdp })
+            );
+
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            await waitIceGathering(peerConnection);
+
+            await connection.invoke("SendAnswer", peerConnection.localDescription.sdp);
+            setStatus('Соединение обновлено');
+        } catch (e) {
+            setStatus('Ошибка renegotiation: ' + e.message);
+            console.error(e);
+        }
+    });
+
+    initCamera();
+</script>
