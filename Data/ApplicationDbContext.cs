@@ -9,5 +9,8 @@ namespace ZoZoom.Data
             : base(options)
         {
         }
+
+        // Add this line
+        public DbSet<ChatMessage> ChatMessages { get; set; }
     }
 }

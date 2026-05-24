@@ -25,6 +25,7 @@ namespace ZoZoom
             
             // Add Razor Pages (Required for Identity UI)
             builder.Services.AddRazorPages();
+            builder.Services.AddSignalR();
 
             var app = builder.Build();
 
@@ -50,6 +51,7 @@ namespace ZoZoom
 
             // Map Razor Pages (Required for Identity UI)
             app.MapRazorPages();
+            app.MapHub<Hubs.ChatHub>("/chatHub");
 
             app.Run();
         }
