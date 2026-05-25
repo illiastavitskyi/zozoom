@@ -11,7 +11,7 @@ namespace ZoZoom.Hubs
         {
             _sfuManager = sfuManager;
         }
-
+       
         public override Task OnConnectedAsync()
         {
             // Регистрируем sender для этого конкретного connectionId
