@@ -20,6 +20,13 @@
     <button id="startCallBtn" class="btn btn-primary mt-4" style="display:none;">
         Начать трансляцию
     </button>
+    <button id="toggleMicBtn" class="btn btn-warning mt-2">
+        Выключить микрофон
+    </button>
+
+    <button id="toggleSoundBtn" class="btn btn-secondary mt-2">
+        Выключить звук
+    </button>
     <p id="statusMsg" style="margin-top:10px;color:gray;"></p>
 </div>
 
@@ -36,6 +43,8 @@
     };
     const peerConnection = new RTCPeerConnection(configuration);
     let localStream;
+    let micEnabled = true;
+    let soundEnabled = true;
 
     // Входящие треки от сервера
     peerConnection.ontrack = (event) => {
@@ -138,5 +147,33 @@
         }
     });
 
-    initCamera();
+       initCamera();
+
+    document.getElementById('toggleMicBtn').addEventListener('click', () => {
+
+        const audioTrack = localStream.getAudioTracks()[0];
+
+        if (!audioTrack) return;
+
+        micEnabled = !micEnabled;
+        audioTrack.enabled = micEnabled;
+
+        document.getElementById('toggleMicBtn').textContent =
+            micEnabled ? 'Выключить микрофон' : 'Включить микрофон';
+    });
+
+    document.getElementById('toggleSoundBtn').addEventListener('click', () => {
+
+        soundEnabled = !soundEnabled;
+
+        const videos = document.querySelectorAll('#remoteVideos video');
+
+        videos.forEach(video => {
+            video.muted = !soundEnabled;
+        });
+
+        document.getElementById('toggleSoundBtn').textContent =
+            soundEnabled ? 'Выключить звук' : 'Включить звук';
+    });
+
 </script>
