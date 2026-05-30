@@ -5,38 +5,41 @@ namespace ZoZoom.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize] // Ensure only logged-in users can upload
+    [Authorize]
     public class UploadController : ControllerBase
     {
         private readonly IWebHostEnvironment _env;
+        private const long MaxFileBytes = 500L * 1024L * 1024L; // 500 MB
 
         public UploadController(IWebHostEnvironment env)
         {
             _env = env;
         }
 
+        // Allow up to 500 MB for this action
+        [RequestSizeLimit(MaxFileBytes)]
         [HttpPost]
         public async Task<IActionResult> UploadFile(IFormFile file)
         {
             if (file == null || file.Length == 0)
-                return BadRequest("No file uploaded.");
+                return BadRequest(new { error = "No file uploaded." });
 
-            // Create 'uploads' folder in wwwroot if it doesn't exist
+            if (file.Length > MaxFileBytes)
+                return StatusCode(413, new { error = "File too large. Maximum allowed size is 500 MB." });
+
             var uploadsFolder = Path.Combine(_env.WebRootPath, "uploads");
             if (!Directory.Exists(uploadsFolder))
                 Directory.CreateDirectory(uploadsFolder);
 
-            // Generate a unique filename to prevent overwriting
-            var uniqueFileName = Guid.NewGuid().ToString() + "_" + file.FileName;
+            var uniqueFileName = Guid.NewGuid().ToString("N") + "_" + Path.GetFileName(file.FileName);
             var filePath = Path.Combine(uploadsFolder, uniqueFileName);
 
-            // Save the file to the wwwroot/uploads directory
-            using (var fileStream = new FileStream(filePath, FileMode.Create))
+            // Stream directly to disk (avoids buffering whole file in memory)
+            await using (var targetStream = System.IO.File.Create(filePath))
             {
-                await file.CopyToAsync(fileStream);
+                await file.CopyToAsync(targetStream);
             }
 
-            // Return the public URL to access the file
             var fileUrl = $"/uploads/{uniqueFileName}";
             return Ok(new { url = fileUrl });
         }

@@ -29,5 +29,11 @@ namespace ZoZoom.Hubs
             await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
             await Clients.Group(groupName).SendAsync("SystemMessage", $"{Context.User.Identity.Name} joined {groupName}");
         }
+
+        public async Task LeaveGroup(string groupName)
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
+            await Clients.Group(groupName).SendAsync("SystemMessage", $"{Context.User.Identity.Name} left {groupName}");
+        }
     }
 }

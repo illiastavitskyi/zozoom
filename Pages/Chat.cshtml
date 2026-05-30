@@ -4,99 +4,316 @@
     ViewData["Title"] = "Chat";
 }
 
-<div class="row">
-    <div class="col-md-3">
-        <h3>Rooms</h3>
-        <input type="text" id="groupNameBox" class="form-control mb-2" placeholder="Group/Meeting Name" />
-        <button id="joinGroupBtn" class="btn btn-secondary w-100">Join Group</button>
+<style>
+    .chat-container { height: 600px; display: flex; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
+    .sidebar { width: 300px; background: #f8f9fa; padding: 20px; border-right: 1px solid #ddd; }
+    .chat-area { flex: 1; display: flex; flex-direction: column; background: #fff; }
+    .chat-header { padding: 15px; background: #007bff; color: white; border-bottom: 1px solid #ddd; font-weight: bold; }
+    .messages-box { flex: 1; padding: 20px; overflow-y: auto; background: #f0f2f5; }
+    .input-area { padding: 15px; background: #fff; border-top: 1px solid #ddd; display: flex; gap: 10px; }
+    
+    .msg-bubble { max-width: 75%; padding: 10px 15px; margin-bottom: 15px; border-radius: 15px; position: relative; clear: both; word-wrap: break-word; }
+    .msg-sent { background: #007bff; color: white; float: right; border-bottom-right-radius: 0; }
+    .msg-received { background: #e4e6eb; color: black; float: left; border-bottom-left-radius: 0; }
+    .msg-system { text-align: center; color: #888; font-size: 0.85em; margin: 10px 0; clear: both; }
+    .msg-author { font-size: 0.75em; opacity: 0.8; margin-bottom: 4px; display: block; }
+</style>
+
+<div class="chat-container shadow-sm">
+    <!-- Sidebar -->
+    <div class="sidebar d-flex flex-column gap-4">
+        <div>
+            <h5>Group Chat</h5>
+            <input type="text" id="groupNameBox" class="form-control mb-2" placeholder="Room Name" />
+            <div class="d-flex gap-2">
+                <button id="joinGroupBtn" class="btn btn-primary flex-fill">Join</button>
+                <button id="leaveGroupBtn" class="btn btn-outline-danger flex-fill" disabled>Leave</button>
+            </div>
+        </div>
+        <hr />
+        <div>
+            <h5>Private Chat</h5>
+            <select id="privateUserSelect" class="form-select mb-2">
+                <option value="">-- Select a User --</option>
+                @foreach (var u in Model.OtherUsers)
+                {
+                    <option value="@u.Id">@u.UserName</option>
+                }
+            </select>
+            <small class="text-muted">Select a user, then type to send a private message.</small>
+        </div>
     </div>
 
-    <div class="col-md-9">
-        <div id="chatBox" class="border p-3 mb-3" style="height: 400px; overflow-y: scroll;">
-            <ul id="messagesList" class="list-unstyled"></ul>
-        </div>
-
-        <div class="input-group">
+    <!-- Chat Area -->
+    <div class="chat-area">
+        <div class="chat-header" id="chatHeaderTitle">Not Connected to a Room</div>
+        <div class="messages-box" id="chatBox"></div>
+        <div class="input-area">
             <input type="file" id="fileInput" class="form-control" style="max-width: 250px;" />
-            <input type="text" id="messageInput" class="form-control" placeholder="Type a message..." />
-            <button id="sendBtn" class="btn btn-primary">Send</button>
+            <input type="text" id="messageInput" class="form-control" placeholder="Type a message..." disabled />
+            <button id="sendBtn" class="btn btn-primary" disabled>Send</button>
         </div>
     </div>
 </div>
 
-<!-- Load SignalR client from CDN -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
 <script>
-    const connection = new signalR.HubConnectionBuilder()
-    .withUrl("/chatHub")
-    .build();
+    const MAX_FILE_BYTES = 500 * 1024 * 1024; // 500 MB
 
-    connection.on("ReceiveMessage", (user, message, fileUrl, group) => {
-    const li = document.createElement("li");
-    let content = `<strong>${user}</strong> [${group}]: ${message}`;
-    if (fileUrl) {
-    content += `<br><a href="${fileUrl}" target="_blank">Attachment</a>`;
-    }
-    li.innerHTML = content;
-    document.getElementById("messagesList").appendChild(li);
-    document.getElementById("chatBox").scrollTop = document.getElementById("chatBox").scrollHeight;
+    const currentUserName = "@Model.CurrentUserName";
+    let activeGroupName = null;
+
+    const connection = new signalR.HubConnectionBuilder().withUrl("/chatHub").build();
+    const chatBox = document.getElementById("chatBox");
+
+    // UI Elements
+    const msgInput = document.getElementById("messageInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const groupNameBox = document.getElementById("groupNameBox");
+    const joinBtn = document.getElementById("joinGroupBtn");
+    const leaveBtn = document.getElementById("leaveGroupBtn");
+    const privateSelect = document.getElementById("privateUserSelect");
+    const headerTitle = document.getElementById("chatHeaderTitle");
+
+    connection.on("ReceiveMessage", (sender, message, fileUrl, group) => {
+    appendMessage(sender, message, fileUrl, sender === currentUserName ? 'sent' : 'received', `Group: ${group}`);
+    });
+
+    connection.on("ReceivePrivateMessage", (sender, message, fileUrl) => {
+    appendMessage(sender, message, fileUrl, sender === currentUserName ? 'sent' : 'received', 'Private Message');
     });
 
     connection.on("SystemMessage", (message) => {
-    const li = document.createElement("li");
-    li.innerHTML = `<em>${message}</em>`;
-    document.getElementById("messagesList").appendChild(li);
+    chatBox.innerHTML += `<div class="msg-system">${message}</div>`;
+    scrollToBottom();
     });
 
-    document.getElementById("joinGroupBtn").addEventListener("click", () => {
-    const group = document.getElementById("groupNameBox").value;
+    // --- Actions ---
+    joinBtn.addEventListener("click", () => {
+    const group = groupNameBox.value.trim();
+    if (group) {
     connection.invoke("JoinGroup", group);
+    activeGroupName = group;
+    headerTitle.textContent = `Room: ${group}`;
+    joinBtn.disabled = true;
+    leaveBtn.disabled = false;
+    enableInput();
+    }
     });
 
-    document.getElementById("sendBtn").addEventListener("click", async () => {
-    const group = document.getElementById("groupNameBox").value;
-    const msg = document.getElementById("messageInput").value;
+    leaveBtn.addEventListener("click", () => {
+    if (activeGroupName) {
+    connection.invoke("LeaveGroup", activeGroupName);
+    activeGroupName = null;
+    headerTitle.textContent = "Not Connected to a Room";
+    joinBtn.disabled = false;
+    leaveBtn.disabled = true;
+    disableInputIfNeeded();
+    }
+    });
+
+    privateSelect.addEventListener("change", () => {
+    if (privateSelect.value) {
+    headerTitle.textContent = `Private Chat: ${privateSelect.options[privateSelect.selectedIndex].text}`;
+    enableInput();
+    } else {
+    if (activeGroupName) {
+    headerTitle.textContent = `Room: ${activeGroupName}`;
+    } else {
+    headerTitle.textContent = "Not Connected";
+    disableInputIfNeeded();
+    }
+    }
+    });
+
+    // NEW: send handler with immediate pending message + upload progress via XHR
+    sendBtn.addEventListener("click", async () => {
+    const msg = msgInput.value;
     const fileInput = document.getElementById("fileInput");
-    
-    let fileUrl = null;
+    const targetUserId = privateSelect.value;
 
-    // 1. Handle file upload if a file is selected
-    if (fileInput.files.length > 0) {
-        const formData = new FormData();
-        formData.append("file", fileInput.files[0]);
-
-        try {
-            // Send the file to our new API endpoint
-            const response = await fetch('/api/upload', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (response.ok) {
-                const result = await response.json();
-                fileUrl = result.url; // Get the generated URL from the server
-                fileInput.value = ''; // Clear the file input
-            } else {
-                console.error("File upload failed.");
-                alert("Failed to upload the file.");
-                return; // Stop execution if upload fails
-            }
-        } catch (err) {
-            console.error("Error uploading file:", err);
-            return;
-        }
+    // No file -> simple send
+    if (fileInput.files.length === 0) {
+    if ((msg && msg.trim() !== '')) {
+    if (targetUserId) {
+    connection.invoke("SendPrivateMessage", targetUserId, msg, null);
+    appendMessage(currentUserName, msg, null, 'sent', 'Private Message');
+    } else if (activeGroupName) {
+    connection.invoke("SendGroupMessage", activeGroupName, msg, null);
+    }
+    msgInput.value = '';
+    }
+    return;
     }
 
-    // 2. Send the message and the fileUrl via SignalR
-    // Only send if there is a text message OR an uploaded file
-    if (msg.trim() !== '' || fileUrl !== null) {
-        connection.invoke("SendGroupMessage", group, msg, fileUrl)
-            .catch(err => console.error(err.toString()));
-            
-        // Clear the text input
-        document.getElementById("messageInput").value = '';
+    // File present -> client-side size check
+    const file = fileInput.files[0];
+    if (file.size > MAX_FILE_BYTES) {
+    alert("Selected file is too large. Maximum allowed size is 500 MB.");
+    return;
     }
-});
+
+    // Create pending bubble with progress UI
+    const pendingId = createPendingBubble(currentUserName, file.name, targetUserId ? 'Private Message' : (activeGroupName ? `Group: ${activeGroupName}` : 'Not Connected'));
+    // Disable inputs while uploading (optional)
+    sendBtn.disabled = true;
+    msgInput.disabled = true;
+
+    try {
+    const uploadResult = await uploadFileWithProgress(file, (percent) => {
+    updatePendingProgress(pendingId, percent);
+    });
+
+    if (uploadResult.ok) {
+    const result = await uploadResult.json();
+    const fileUrl = result.url;
+
+    // Replace pending bubble with final message (sender sees it immediately)
+    replacePendingWithFinal(pendingId, '', fileUrl, 'sent', targetUserId ? 'Private Message' : (activeGroupName ? `Group: ${activeGroupName}` : ''));
+
+    // Send via SignalR
+    if (targetUserId) {
+    connection.invoke("SendPrivateMessage", targetUserId, msgInput.value, fileUrl);
+    // We already showed the sender bubble, clear text
+    msgInput.value = '';
+    } else if (activeGroupName) {
+    connection.invoke("SendGroupMessage", activeGroupName, msgInput.value, fileUrl);
+    msgInput.value = '';
+    } else {
+    // Not connected anywhere - inform user and leave bubble as uploaded file message
+    alert("File uploaded but you're not in a group and no private recipient selected.");
+    }
+    } else {
+    // Upload failed - show error on pending bubble
+    let errText = "Upload failed.";
+    try {
+    const errBody = await uploadResult.json();
+    if (errBody?.error) errText = errBody.error;
+    } catch {}
+    markPendingError(pendingId, errText);
+    }
+    } catch (err) {
+    console.error(err);
+    markPendingError(pendingId, "Upload error. Check connection.");
+    } finally {
+    sendBtn.disabled = false;
+    msgInput.disabled = !(activeGroupName || privateSelect.value);
+    fileInput.value = '';
+    }
+    });
+
+    // Upload using XHR to get progress events
+    function uploadFileWithProgress(file, onProgress) {
+    return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const form = new FormData();
+    form.append('file', file);
+
+    xhr.open('POST', '/api/upload', true);
+    xhr.withCredentials = true;
+
+    xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) {
+    const percent = Math.round((e.loaded / e.total) * 100);
+    onProgress(percent);
+    }
+    };
+
+    xhr.onload = function () {
+    resolve(new Response(xhr.responseText, { status: xhr.status }));
+    };
+    xhr.onerror = function () {
+    reject(new Error('Network error'));
+    };
+    xhr.send(form);
+    });
+    }
+
+    // UI helpers for pending bubble
+    function createPendingBubble(sender, filename, footerInfo) {
+    const id = 'pending-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+    const html =
+    `<div id="${id}" class="msg-bubble msg-sent shadow-sm" style="position:relative;">
+    <span class="msg-author">${sender} - ${footerInfo}</span>
+    <div><strong>Uploading:</strong> ${escapeHtml(filename)}</div>
+    <div class="mt-2">
+    <div style="display:flex;align-items:center;gap:8px;">
+    <div style="width:36px;height:36px;border-radius:50%;border:4px solid rgba(255,255,255,0.2);position:relative;background:transparent;">
+    <svg viewBox="0 0 36 36" style="position:absolute;top:0;left:0;width:36px;height:36px;">
+    <path class="progress-back" d="M18 2.0845
+    a 15.9155 15.9155 0 0 1 0 31.831
+    a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#ffffff33" stroke-width="4" />
+    <path id="${id}-arc" d="M18 2.0845
+    a 15.9155 15.9155 0 0 1 0 31.831" fill="none" stroke="#fff" stroke-width="4" stroke-dasharray="0 100" stroke-linecap="round"/>
+    </svg>
+    </div>
+    <div style="flex:1;">
+    <div id="${id}-bar" style="height:8px;background:#ffffff55;border-radius:6px;overflow:hidden;">
+    <div style="width:0%;height:100%;background:#fff;" id="${id}-bar-fill"></div>
+    </div>
+    <div style="font-size:0.8em;color:#ffffffcc;margin-top:4px;" id="${id}-percent">0%</div>
+    </div>
+    </div>
+    </div>
+    </div>`;
+    chatBox.innerHTML += html;
+    scrollToBottom();
+    return id;
+    }
+
+    function updatePendingProgress(id, percent) {
+    const barFill = document.getElementById(id + '-bar-fill');
+    const percentEl = document.getElementById(id + '-percent');
+    const arc = document.getElementById(id + '-arc');
+    if (barFill) barFill.style.width = percent + '%';
+    if (percentEl) percentEl.textContent = percent + '%';
+    if (arc) {
+    const circumference = 100; // arbitrary scale for dasharray
+    const dash = (percent / 100) * circumference;
+    arc.setAttribute('stroke-dasharray', `${dash} ${circumference - dash}`);
+    }
+    scrollToBottom();
+    }
+
+    function markPendingError(id, message) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML += `<div style="margin-top:8px;color:#ffd2d2;font-weight:600;">${escapeHtml(message)}</div>`;
+    el.style.background = '#ff6b6b';
+    }
+
+    function replacePendingWithFinal(id, text, fileUrl, type, footerInfo) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.outerHTML = `<div class="msg-bubble msg-${type} shadow-sm">
+    <span class="msg-author">${escapeHtml(currentUserName)} - ${escapeHtml(footerInfo)}</span>
+    ${text ? `<div>${escapeHtml(text)}</div>` : ''}
+    ${fileUrl ? `<div class="mt-2"><a href="${fileUrl}" target="_blank" class="text-white">📄 ${escapeHtml(fileUrl.split('/').pop())}</a></div>` : ''}
+    </div>`;
+    scrollToBottom();
+    }
+
+    // existing appendMessage for normal messages
+    function appendMessage(sender, message, fileUrl, type, footerInfo) {
+    let content = `<div class="msg-bubble msg-${type} shadow-sm">`;
+    content += `<span class="msg-author">${escapeHtml(sender)} - ${escapeHtml(footerInfo)}</span>`;
+    if (message) content += `<div>${escapeHtml(message)}</div>`;
+    if (fileUrl) content += `<div class="mt-2"><a href="${fileUrl}" target="_blank" class="${type === 'sent' ? 'text-white' : ''}">📄 Attachment</a></div>`;
+    content += `</div>`;
+    chatBox.innerHTML += content;
+    scrollToBottom();
+    }
+
+    function scrollToBottom() { chatBox.scrollTop = chatBox.scrollHeight; }
+    function enableInput() { msgInput.disabled = false; sendBtn.disabled = false; }
+    function disableInputIfNeeded() { if (!activeGroupName && !privateSelect.value) { msgInput.disabled = true; sendBtn.disabled = true; } }
+
+    // small helper to avoid XSS in inserted strings
+    function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
 
     connection.start().catch(err => console.error(err.toString()));
 </script>

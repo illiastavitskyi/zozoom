@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using ZoZoom.Data;
+using Microsoft.AspNetCore.Http.Features;
 
 namespace ZoZoom
 {
@@ -9,6 +10,21 @@ namespace ZoZoom
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            // Set max upload size to 500 MB
+            const long MaxUploadBytes = 500L * 1024L * 1024L;
+
+            // Kestrel max request body size
+            builder.WebHost.ConfigureKestrel(options =>
+            {
+                options.Limits.MaxRequestBodySize = MaxUploadBytes;
+            });
+
+            // Increase form multipart body limit
+            builder.Services.Configure<FormOptions>(options =>
+            {
+                options.MultipartBodyLengthLimit = MaxUploadBytes;
+            });
 
             // Add Database Context
             var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
@@ -22,9 +38,11 @@ namespace ZoZoom
 
             // Add support for MVC Controllers and Views
             builder.Services.AddControllersWithViews();
-            
+
             // Add Razor Pages (Required for Identity UI)
             builder.Services.AddRazorPages();
+
+            // Add SignalR
             builder.Services.AddSignalR();
 
             var app = builder.Build();
@@ -40,17 +58,16 @@ namespace ZoZoom
 
             app.UseRouting();
 
-            // Authentication and Authorization
             app.UseAuthentication();
             app.UseAuthorization();
 
-            // Configure the default route for your MVC controllers
             app.MapControllerRoute(
                 name: "default",
                 pattern: "{controller=Home}/{action=Index}/{id?}");
 
-            // Map Razor Pages (Required for Identity UI)
             app.MapRazorPages();
+
+            // Map SignalR hubs
             app.MapHub<Hubs.ChatHub>("/chatHub");
 
             app.Run();
