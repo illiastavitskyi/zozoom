@@ -8,6 +8,17 @@
     <div id="jitsi-container"
          style="width:100%;height:800px;">
     </div>
+    <span id="recordingTimer"
+          style="font-size:20px;font-weight:bold;margin-right:15px;">
+        00:00
+    </span>
+    <button id="startRecordingBtn" class="btn btn-danger mt-2">
+        Start Recording
+    </button>
+
+    <button id="stopRecordingBtn" class="btn btn-secondary mt-2">
+        Stop Recording
+    </button>
 </div>
 
 <script src="https://meet.jit.si/external_api.js"></script>
@@ -27,5 +38,97 @@
         domain,
         options
     );
+        let mediaRecorder;
+    let recordedChunks = [];
+    let recordingStream;
+        let recordingSeconds = 0;
+    let timerInterval = null;
 
+    document.getElementById('startRecordingBtn')
+        .addEventListener('click', async () => {
+
+        try {
+
+            recordingStream =
+                await navigator.mediaDevices.getDisplayMedia({
+                    video: true,
+                    audio: true
+                });
+
+            recordedChunks = [];
+
+            mediaRecorder =
+                new MediaRecorder(recordingStream);
+
+            mediaRecorder.ondataavailable = (event) => {
+
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.start();
+                recordingSeconds = 0;
+
+    timerInterval = setInterval(() => {
+
+        recordingSeconds++;
+
+        const minutes =
+            String(Math.floor(recordingSeconds / 60))
+                .padStart(2, '0');
+
+        const seconds =
+            String(recordingSeconds % 60)
+                .padStart(2, '0');
+
+        document.getElementById('recordingTimer')
+            .textContent =
+            `${minutes}:${seconds}`;
+
+    }, 1000);
+
+            alert("Recording started");
+
+        } catch (err) {
+
+            console.error(err);
+            alert("Failed to start recording");
+        }
+    });
+
+    document.getElementById('stopRecordingBtn')
+        .addEventListener('click', () => {
+
+        if (!mediaRecorder) return;
+
+        mediaRecorder.stop();
+        clearInterval(timerInterval);
+        mediaRecorder.onstop = () => {
+
+            const blob = new Blob(
+                recordedChunks,
+                { type: 'video/webm' }
+            );
+
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+
+            a.href = url;
+            a.download = `meeting-${Date.now()}.webm`;
+
+            a.click();
+
+            URL.revokeObjectURL(url);
+
+            if (recordingStream) {
+                recordingStream
+                    .getTracks()
+                    .forEach(track => track.stop());
+            }
+
+            alert("Recording saved");
+        };
+    });
 </script>
