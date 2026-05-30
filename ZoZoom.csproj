@@ -16,4 +16,9 @@
     <PackageReference Include="SIPSorcery" Version="*" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Hubs\" />
+    <Folder Include="Services.cs\" />
+  </ItemGroup>
+
 </Project>
