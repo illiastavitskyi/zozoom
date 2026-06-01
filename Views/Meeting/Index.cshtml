@@ -1,0 +1,43 @@
+﻿<div id="calendar"></div>
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var calendarEl = document.getElementById('calendar');
+        var calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth',
+            events: '/Meeting/GetEvents',
+            eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+
+            // Клік по дню → створення зустрічі
+            dateClick: function (info) {
+                window.location.href = '/Meeting/Create?date=' + info.dateStr;
+            },
+
+            // Клік по події → відкриття деталей
+            eventClick: function (info) {
+                // якщо у JSON є поле url
+                if (info.event.url) {
+                    window.location.href = info.event.url;
+                }
+                // або якщо ти передаєш meetingLink як extendedProps
+                else if (info.event.extendedProps.meetingLink) {
+                    window.location.href = info.event.extendedProps.meetingLink;
+                }
+            }
+        });
+        calendar.render();
+    });
+</script>
+<style>
+    .fc-daygrid-day {
+        cursor: pointer;
+    }
+</style>
+
+@if (TempData["Message"] != null)
+{
+    <div class="alert alert-info">
+        @TempData["Message"]
+    </div>
+}
+

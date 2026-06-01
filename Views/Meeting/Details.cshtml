@@ -1,0 +1,43 @@
+﻿@model ZoZoom.Models.Meeting
+
+<h2>Деталі зустрічі</h2>
+
+<div class="card">
+    <div class="card-body">
+        <h4 class="card-title">@Model.Title</h4>
+        <p class="card-text">@Model.Description</p>
+
+        <p><strong>Start Meeting:</strong> @Model.StartTime.ToString("dd.MM.yyyy HH:mm")</p>
+        <p><strong>End Meeting:</strong> @Model.EndTime.ToString("dd.MM.yyyy HH:mm")</p>
+
+        <p><strong>Meeting Organizer:</strong> @Model.OrganizerId</p>
+
+        <p>
+            <strong>Meeting Link:</strong>
+            <a href="@Model.MeetingLink" target="_blank">@Model.MeetingLink</a>
+        </p>
+
+        @if (Model.ParticipantIds != null && Model.ParticipantIds.Any())
+        {
+            <p><strong>Participants:</strong></p>
+            <ul>
+                @foreach (var participant in Model.ParticipantIds)
+                {
+                    <li>@participant</li>
+                }
+            </ul>
+        }
+        else
+        {
+            <p><em>No Participants</em></p>
+        }
+    </div>
+</div>
+
+<a asp-action="Index" asp-controller="Meeting" class="btn btn-secondary mt-3">Back to Calendar</a>
+
+<form asp-action="Delete" asp-controller="Meeting" method="post" class="mt-3">
+    <input type="hidden" name="id" value="@Model.Id" />
+    <button type="submit" class="btn btn-danger">Delete</button>
+</form>
+
