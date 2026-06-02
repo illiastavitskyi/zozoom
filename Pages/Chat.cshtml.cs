@@ -4,22 +4,23 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ZoZoom.Data; 
 
 namespace ZoZoom.Pages
 {
     [Authorize]
     public class ChatModel : PageModel
     {
-        private readonly UserManager<IdentityUser> _userManager;
+        private readonly UserManager<ApplicationUser> _userManager;
 
-        public ChatModel(UserManager<IdentityUser> userManager)
+        public ChatModel(UserManager<ApplicationUser> userManager)
         {
             _userManager = userManager;
         }
 
         public string CurrentUserId { get; set; }
         public string CurrentUserName { get; set; }
-        public List<IdentityUser> OtherUsers { get; set; } = new();
+        public List<ApplicationUser> OtherUsers { get; set; } = new();
 
         public async Task OnGetAsync()
         {
