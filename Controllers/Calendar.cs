@@ -23,9 +23,9 @@ namespace ZoZoom.Controllers
 
             if (!string.IsNullOrEmpty(date))
             {
-                // 🔹 Підставляємо вибраний день у поле початку
+               
                 meeting.StartTime = DateTime.Parse(date);
-                meeting.EndTime = meeting.StartTime.AddHours(1); // наприклад, тривалість 1 година
+                meeting.EndTime = meeting.StartTime.AddHours(1); 
             }
 
             return View(meeting);
@@ -35,8 +35,7 @@ namespace ZoZoom.Controllers
         [HttpPost]
         public IActionResult Create(Models.Meeting meeting)
         {
-            // Оскільки OrganizerId та MeetingLink заповнюються в коді, 
-            // видаляємо їх з валідації моделі, щоб ModelState не ламався
+           
             ModelState.Remove(nameof(meeting.OrganizerId));
             ModelState.Remove(nameof(meeting.MeetingLink));
 
