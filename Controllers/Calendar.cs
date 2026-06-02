@@ -15,8 +15,6 @@ namespace ZoZoom.Controllers
 
         public IActionResult Index() => View(_context.Meetings.ToList());
 
-        //public IActionResult Create() => View();
-
         public IActionResult Create(string date)
         {
             var meeting = new Models.Meeting();
