@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using ZoZoom.Data;
+using ZoZoom.Hubs;
 
 namespace ZoZoom
 {
@@ -18,6 +19,7 @@ namespace ZoZoom
             builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
                 .AddEntityFrameworkStores<ApplicationDbContext>();
             builder.Services.AddControllersWithViews();
+            builder.Services.AddSignalR();
 
             var app = builder.Build();
 
@@ -40,6 +42,7 @@ namespace ZoZoom
                 pattern: "{controller=Home}/{action=Index}/{id?}")
                 .WithStaticAssets();
             app.MapRazorPages().WithStaticAssets();
+            app.MapHub<ChatHub>("/chatHub");
 
             app.Run();
         }
