@@ -232,6 +232,7 @@
                         appendMessage(currentUserName, msg, null, 'sent', 'Private Message');
                     } else if (activeGroupName) {
                         connection.invoke("SendGroupMessage", activeGroupName, msg, null);
+                        appendMessage(currentUserName, msg, null, 'sent', `Group: ${activeGroupName}`);
                     }
                     msgInput.value = '';
                 }
