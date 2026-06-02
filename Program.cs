@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using ZoZoom.Data;
-using ZoZoom.Hubs;
-using ZoZoom.Services;
 
 namespace ZoZoom
 {
@@ -20,10 +18,6 @@ namespace ZoZoom
             builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
                 .AddEntityFrameworkStores<ApplicationDbContext>();
             builder.Services.AddControllersWithViews();
-
-            // --- WebRTC Инфраструктура ---
-            builder.Services.AddSignalR();
-            builder.Services.AddSingleton<SfuConnectionManager>();
 
             var app = builder.Build();
 
@@ -46,9 +40,6 @@ namespace ZoZoom
                 pattern: "{controller=Home}/{action=Index}/{id?}")
                 .WithStaticAssets();
             app.MapRazorPages().WithStaticAssets();
-
-            // --- Эндпоинт для WebSocket ---
-            app.MapHub<WebRtcHub>("/webrtcHub");
 
             app.Run();
         }

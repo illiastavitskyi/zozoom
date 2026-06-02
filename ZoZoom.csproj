@@ -13,7 +13,11 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.0" />
     
-    <PackageReference Include="SIPSorcery" Version="*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Hubs\" />
+    <Folder Include="Services.cs\" />
   </ItemGroup>
 
 </Project>
