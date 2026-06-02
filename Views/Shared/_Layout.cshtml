@@ -102,12 +102,13 @@
     <div class="app-wrapper">
         <nav class="app-sidebar">
             <h3>ZoZoom</h3>
-            
-            <a href="/Meeting" class="nav-link active"> Video Meetings</a>
+
+            <a href="/Chat" class="nav-link">Text Chat</a>
+            <a href="/Meeting" class="nav-link">Video Meetings</a>
             <a href="/Calendar" class="nav-link">Scheduler</a>
 
             <button id="themeToggle" class="theme-toggle-btn">
-                 Toggle Theme
+                Toggle Theme
             </button>
         </nav>
 
@@ -129,6 +130,18 @@
 
                 document.documentElement.setAttribute('data-theme', newTheme);
                 localStorage.setItem('app-theme', newTheme);
+            });
+
+            
+            const currentPath = window.location.pathname;
+            const navLinks = document.querySelectorAll('.nav-link');
+
+            navLinks.forEach(link => {
+                if (link.getAttribute('href').toLowerCase() === currentPath.toLowerCase()) {
+                    link.classList.add('active');
+                } else {
+                    link.classList.remove('active');
+                }
             });
         });
     </script>
