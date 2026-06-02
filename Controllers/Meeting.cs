@@ -1,102 +1,18 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using ZoZoom.Data;
-using ZoZoom.Models;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
 namespace ZoZoom.Controllers
 {
-    public class MeetingController : Controller
+    public class Meeting : Controller
     {
-        private readonly ApplicationDbContext _context;
-
-        public MeetingController(ApplicationDbContext context)
+        [Authorize]
+        public IActionResult Index(string room = "ZoZoomGeneral")
         {
-            _context = context;
+            ViewBag.JitsiToken = Environment.GetEnvironmentVariable("JITSI_JWT_TOKEN") ?? "eyJraWQiOiJ2cGFhcy1tYWdpYy1jb29raWUtNmYzOGZjMDQyYjAxNDY0N2ExNGRhNmMyMzRiN2ExMTYvMTcwNzAxLVNBTVBMRV9BUFAiLCJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJqaXRzaSIsImlzcyI6ImNoYXQiLCJpYXQiOjE3ODA0MTUzOTYsImV4cCI6MTc4MDQyMjU5NiwibmJmIjoxNzgwNDE1MzkxLCJzdWIiOiJ2cGFhcy1tYWdpYy1jb29raWUtNmYzOGZjMDQyYjAxNDY0N2ExNGRhNmMyMzRiN2ExMTYiLCJjb250ZXh0Ijp7ImZlYXR1cmVzIjp7ImxpdmVzdHJlYW1pbmciOnRydWUsImZpbGUtdXBsb2FkIjp0cnVlLCJvdXRib3VuZC1jYWxsIjp0cnVlLCJzaXAtb3V0Ym91bmQtY2FsbCI6ZmFsc2UsInRyYW5zY3JpcHRpb24iOnRydWUsImxpc3QtdmlzaXRvcnMiOmZhbHNlLCJyZWNvcmRpbmciOnRydWUsImZsaXAiOmZhbHNlfSwidXNlciI6eyJoaWRkZW4tZnJvbS1yZWNvcmRlciI6ZmFsc2UsIm1vZGVyYXRvciI6dHJ1ZSwibmFtZSI6ImJhc2htYWNrMDA3IiwiaWQiOiJnb29nbGUtb2F1dGgyfDExNDQ2MDE3NDAxMzM5MDg2MzYwOSIsImF2YXRhciI6IiIsImVtYWlsIjoiYmFzaG1hY2swMDdAZ21haWwuY29tIn19LCJyb29tIjoiKiJ9.UH0PWlmQ7iHxsW0o_3-GOHi_JnMt-dqnTKOprS193kJrN8hhDCfCRpaLvE0aaTdBzS6qxuQRdz6QDviOIazyfOmoAWGL3ojZlqQKIyftMuKIVpf6uKzu1wXg_6_ikHoFEX2R9yM1BjJcBPgzj3hWws98JUT28DWyp6eTEHjkrdVf4-8FFx9cKlDaKTvEv1Br1rQqmlWOfnTm7PM6EikLx7I0HfRlwJes9Yd0rKKVAqYvkH62TSaD8mcB1iDuzo0qJs5O0O4MGdsG52yBOZ2opwBS0a_V4ClCcxkAODftXjqobdykEMEccLS3tzd4_KbM98sPq8Gdok7dFArH5uz_Ng";
+            ViewBag.JitsiAppId = Environment.GetEnvironmentVariable("JITSI_APP_ID") ?? "vpaas-magic-cookie-6f38fc042b014647a14da6c234b7a116";
+            ViewBag.RoomName = room;
+
+            return View();
         }
-
-        public IActionResult Index() => View(_context.Meetings.ToList());
-
-        //public IActionResult Create() => View();
-
-        public IActionResult Create(string date)
-        {
-            var meeting = new Meeting();
-
-            if (!string.IsNullOrEmpty(date))
-            {
-                // 🔹 Підставляємо вибраний день у поле початку
-                meeting.StartTime = DateTime.Parse(date);
-                meeting.EndTime = meeting.StartTime.AddHours(1); // наприклад, тривалість 1 година
-            }
-
-            return View(meeting);
-        }
-
-
-        [HttpPost]
-        public IActionResult Create(Meeting meeting)
-        {
-            // Оскільки OrganizerId та MeetingLink заповнюються в коді, 
-            // видаляємо їх з валідації моделі, щоб ModelState не ламався
-            ModelState.Remove(nameof(meeting.OrganizerId));
-            ModelState.Remove(nameof(meeting.MeetingLink));
-
-            if (ModelState.IsValid)
-            {
-               
-                meeting.OrganizerId = User.Identity?.Name ?? "admin";
-                meeting.ParticipantIds = meeting.ParticipantIds ?? new List<string>();
-
-                meeting.MeetingLink = string.Empty;
-
-                _context.Meetings.Add(meeting);
-                _context.SaveChanges();
-
-                meeting.MeetingLink = Url.Action("Details", "Meeting", new { id = meeting.Id }, Request.Scheme);
-                _context.SaveChanges();
-
-                System.Diagnostics.Debug.WriteLine($"Title: {meeting.Title}");
-                System.Diagnostics.Debug.WriteLine($"StartTime: {meeting.StartTime}");
-                System.Diagnostics.Debug.WriteLine($"EndTime: {meeting.EndTime}");
-
-                return RedirectToAction("Index", "Meeting");
-            }
-
-            return View(meeting);
-        }
-        public IActionResult Details(int id)
-        {
-            var meeting = _context.Meetings.FirstOrDefault(m => m.Id == id);
-            if (meeting == null) return NotFound();
-
-            return View(meeting);
-        }
-
-        [HttpPost]
-        public IActionResult Delete(int id)
-        {
-            var meeting = _context.Meetings.FirstOrDefault(m => m.Id == id);
-            if (meeting == null) return NotFound();
-
-            _context.Meetings.Remove(meeting);
-            _context.SaveChanges();
-
-            return RedirectToAction("Index");
-        }
-
-        public JsonResult GetEvents()
-        {
-            var meetings = _context.Meetings.Select(m => new {
-                id = m.Id,
-                title = m.Title,
-                start = m.StartTime,
-                end = m.EndTime,
-                url = Url.Action("Details", "Meeting", new { id = m.Id })
-            }).ToList();
-
-            return Json(meetings);
-
-        }
-
     }
-
 }

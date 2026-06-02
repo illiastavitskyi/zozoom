@@ -1,8 +1,9 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using ZoZoom.Models;
 
-public class ApplicationDbContext : DbContext
+public class ApplicationDbContext : IdentityDbContext
 {
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
@@ -15,13 +16,11 @@ public class ApplicationDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // 🔹 Конвертація ParticipantIds у JSON
         modelBuilder.Entity<Meeting>()
-     .Property(m => m.ParticipantIds)
-     .HasConversion(
-         v => JsonSerializer.Serialize(v ?? new List<string>(), (JsonSerializerOptions)null),
-         v => JsonSerializer.Deserialize<List<string>>(v ?? "[]", (JsonSerializerOptions)null)
-     );
-
+            .Property(m => m.ParticipantIds)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v ?? new List<string>(), (JsonSerializerOptions)null),
+                v => JsonSerializer.Deserialize<List<string>>(v ?? "[]", (JsonSerializerOptions)null)
+            );
     }
 }
