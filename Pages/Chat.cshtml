@@ -1,0 +1,361 @@
+﻿@page
+@model ZoZoom.Pages.ChatModel
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <style>
+        :root {
+            --bg-color: #121212;
+            --sidebar-bg: #1e1e1e;
+            --text-color: #ffffff;
+            --border-color: #333333;
+            --nav-link-hover: #333333;
+            --nav-link-color: #a0a0a0;
+        }
+
+        [data-theme="light"] {
+            --bg-color: #f8f9fa;
+            --sidebar-bg: #ffffff;
+            --text-color: #212529;
+            --border-color: #dee2e6;
+            --nav-link-hover: #e9ecef;
+            --nav-link-color: #495057;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        .chat-control-panel {
+            padding: 15px;
+            background-color: var(--sidebar-bg);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .chat-header-title {
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 8px;
+            background-color: var(--bg-color);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .chat-messages {
+            flex-grow: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-input-panel {
+            padding: 15px;
+            background-color: var(--sidebar-bg);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .msg-bubble {
+            max-width: 85%;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            border-radius: 12px;
+            position: relative;
+            word-wrap: break-word;
+            font-size: 0.9rem;
+        }
+
+        .msg-sent {
+            background-color: #007bff;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 0;
+        }
+
+        .msg-received {
+            background-color: var(--nav-link-hover);
+            color: var(--text-color);
+            align-self: flex-start;
+            border-bottom-left-radius: 0;
+            border: 1px solid var(--border-color);
+        }
+
+        .msg-system {
+            align-self: center;
+            color: var(--nav-link-color);
+            font-size: 0.8em;
+            margin: 10px 0;
+        }
+
+        .msg-author {
+            font-size: 0.75em;
+            opacity: 0.8;
+            margin-bottom: 4px;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="chat-control-panel">
+        <div class="mb-2">
+            <div class="input-group input-group-sm">
+                <input type="text" id="groupNameBox" class="form-control" placeholder="Group Name" />
+                <button id="joinGroupBtn" class="btn btn-primary">Join</button>
+                <button id="leaveGroupBtn" class="btn btn-outline-danger" disabled>Leave</button>
+            </div>
+        </div>
+        <div>
+            <select id="privateUserSelect" class="form-select form-select-sm">
+                <option value="">-- Private Message --</option>
+                @foreach (var u in Model.OtherUsers)
+                {
+                    <option value="@u.Id">@u.UserName</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="chat-header-title" id="chatHeaderTitle">Not Connected</div>
+
+    <div class="chat-messages" id="chatBox"></div>
+
+    <div class="chat-input-panel">
+        <input type="file" id="fileInput" class="form-control form-control-sm" />
+        <div class="d-flex gap-2">
+            <input type="text" id="messageInput" class="form-control form-control-sm" placeholder="Type..." disabled />
+            <button id="sendBtn" class="btn btn-sm btn-primary" disabled>Send</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.5/signalr.min.js"></script>
+    <script>
+        const applyTheme = () => {
+            const savedTheme = localStorage.getItem('app-theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        };
+        applyTheme();
+        window.addEventListener('storage', applyTheme);
+
+        const MAX_FILE_BYTES = 500 * 1024 * 1024;
+        const currentUserName = "@Model.CurrentUserName";
+        let activeGroupName = null;
+
+        const connection = new signalR.HubConnectionBuilder().withUrl("/chatHub").build();
+        const chatBox = document.getElementById("chatBox");
+
+        const msgInput = document.getElementById("messageInput");
+        const sendBtn = document.getElementById("sendBtn");
+        const groupNameBox = document.getElementById("groupNameBox");
+        const joinBtn = document.getElementById("joinGroupBtn");
+        const leaveBtn = document.getElementById("leaveGroupBtn");
+        const privateSelect = document.getElementById("privateUserSelect");
+        const headerTitle = document.getElementById("chatHeaderTitle");
+
+        connection.on("ReceiveMessage", (sender, message, fileUrl, group) => {
+            appendMessage(sender, message, fileUrl, sender === currentUserName ? 'sent' : 'received', `Group: ${group}`);
+        });
+
+        connection.on("ReceivePrivateMessage", (sender, message, fileUrl) => {
+            appendMessage(sender, message, fileUrl, sender === currentUserName ? 'sent' : 'received', 'Private Message');
+        });
+
+        connection.on("SystemMessage", (message) => {
+            chatBox.innerHTML += `<div class="msg-system">${message}</div>`;
+            scrollToBottom();
+        });
+
+        joinBtn.addEventListener("click", () => {
+            const group = groupNameBox.value.trim();
+            if (group) {
+                connection.invoke("JoinGroup", group);
+                activeGroupName = group;
+                headerTitle.textContent = `Room: ${group}`;
+                joinBtn.disabled = true;
+                leaveBtn.disabled = false;
+                enableInput();
+            }
+        });
+
+        leaveBtn.addEventListener("click", () => {
+            if (activeGroupName) {
+                connection.invoke("LeaveGroup", activeGroupName);
+                activeGroupName = null;
+                headerTitle.textContent = "Not Connected";
+                joinBtn.disabled = false;
+                leaveBtn.disabled = true;
+                disableInputIfNeeded();
+            }
+        });
+
+        privateSelect.addEventListener("change", () => {
+            if (privateSelect.value) {
+                headerTitle.textContent = `Private Chat: ${privateSelect.options[privateSelect.selectedIndex].text}`;
+                enableInput();
+            } else {
+                if (activeGroupName) {
+                    headerTitle.textContent = `Room: ${activeGroupName}`;
+                } else {
+                    headerTitle.textContent = "Not Connected";
+                    disableInputIfNeeded();
+                }
+            }
+        });
+
+        sendBtn.addEventListener("click", async () => {
+            const msg = msgInput.value;
+            const fileInput = document.getElementById("fileInput");
+            const targetUserId = privateSelect.value;
+
+            if (fileInput.files.length === 0) {
+                if ((msg && msg.trim() !== '')) {
+                    if (targetUserId) {
+                        connection.invoke("SendPrivateMessage", targetUserId, msg, null);
+                        appendMessage(currentUserName, msg, null, 'sent', 'Private Message');
+                    } else if (activeGroupName) {
+                        connection.invoke("SendGroupMessage", activeGroupName, msg, null);
+                        appendMessage(currentUserName, msg, null, 'sent', `Group: ${activeGroupName}`);
+                    }
+                    msgInput.value = '';
+                }
+                return;
+            }
+
+            const file = fileInput.files[0];
+            if (file.size > MAX_FILE_BYTES) {
+                alert("File too large. Max 500 MB.");
+                return;
+            }
+
+            const pendingId = createPendingBubble(currentUserName, file.name, targetUserId ? 'Private Message' : (activeGroupName ? `Group: ${activeGroupName}` : 'Not Connected'));
+            sendBtn.disabled = true;
+            msgInput.disabled = true;
+
+            try {
+                const uploadResult = await uploadFileWithProgress(file, (percent) => {
+                    updatePendingProgress(pendingId, percent);
+                });
+
+                if (uploadResult.ok) {
+                    const result = await uploadResult.json();
+                    const fileUrl = result.url;
+
+                    replacePendingWithFinal(pendingId, '', fileUrl, 'sent', targetUserId ? 'Private Message' : (activeGroupName ? `Group: ${activeGroupName}` : ''));
+
+                    if (targetUserId) {
+                        connection.invoke("SendPrivateMessage", targetUserId, msgInput.value, fileUrl);
+                        msgInput.value = '';
+                    } else if (activeGroupName) {
+                        connection.invoke("SendGroupMessage", activeGroupName, msgInput.value, fileUrl);
+                        msgInput.value = '';
+                    }
+                } else {
+                    markPendingError(pendingId, "Upload failed.");
+                }
+            } catch (err) {
+                markPendingError(pendingId, "Upload error.");
+            } finally {
+                sendBtn.disabled = false;
+                msgInput.disabled = !(activeGroupName || privateSelect.value);
+                fileInput.value = '';
+            }
+        });
+
+        function uploadFileWithProgress(file, onProgress) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                const form = new FormData();
+                form.append('file', file);
+                xhr.open('POST', '/api/upload', true);
+                xhr.withCredentials = true;
+
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const percent = Math.round((e.loaded / e.total) * 100);
+                        onProgress(percent);
+                    }
+                };
+
+                xhr.onload = () => resolve(new Response(xhr.responseText, { status: xhr.status }));
+                xhr.onerror = () => reject(new Error('Network error'));
+                xhr.send(form);
+            });
+        }
+
+        function createPendingBubble(sender, filename, footerInfo) {
+            const id = 'pending-' + Date.now();
+            const html =
+            `<div id="${id}" class="msg-bubble msg-sent shadow-sm">
+                <span class="msg-author">${sender} - ${footerInfo}</span>
+                <div><strong>Uploading:</strong> ${escapeHtml(filename)}</div>
+                <div style="font-size:0.8em; margin-top:4px;" id="${id}-percent">0%</div>
+            </div>`;
+            chatBox.innerHTML += html;
+            scrollToBottom();
+            return id;
+        }
+
+        function updatePendingProgress(id, percent) {
+            const percentEl = document.getElementById(id + '-percent');
+            if (percentEl) percentEl.textContent = percent + '%';
+            scrollToBottom();
+        }
+
+        function markPendingError(id, message) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.style.background = '#dc3545';
+        }
+
+        function replacePendingWithFinal(id, text, fileUrl, type, footerInfo) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.outerHTML = `<div class="msg-bubble msg-${type} shadow-sm">
+                <span class="msg-author">${escapeHtml(currentUserName)} - ${escapeHtml(footerInfo)}</span>
+                ${text ? `<div>${escapeHtml(text)}</div>` : ''}
+                ${fileUrl ? `<div class="mt-2"><a href="${fileUrl}" target="_blank" class="text-white">📄 Attachment</a></div>` : ''}
+            </div>`;
+            scrollToBottom();
+        }
+
+        function appendMessage(sender, message, fileUrl, type, footerInfo) {
+            let content = `<div class="msg-bubble msg-${type} shadow-sm">`;
+            content += `<span class="msg-author">${escapeHtml(sender)} - ${escapeHtml(footerInfo)}</span>`;
+            if (message) content += `<div>${escapeHtml(message)}</div>`;
+            if (fileUrl) content += `<div class="mt-2"><a href="${fileUrl}" target="_blank" class="${type === 'sent' ? 'text-white' : ''}">📄 Attachment</a></div>`;
+            content += `</div>`;
+            chatBox.innerHTML += content;
+            scrollToBottom();
+        }
+
+        function scrollToBottom() { chatBox.scrollTop = chatBox.scrollHeight; }
+        function enableInput() { msgInput.disabled = false; sendBtn.disabled = false; }
+        function disableInputIfNeeded() { if (!activeGroupName && !privateSelect.value) { msgInput.disabled = true; sendBtn.disabled = true; } }
+
+        function escapeHtml(unsafe) {
+            if (!unsafe) return '';
+            return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        connection.start().catch(err => console.error(err.toString()));
+    </script>
+</body>
+</html>
